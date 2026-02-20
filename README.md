@@ -51,5 +51,4 @@ Edit `run_tfim_qsl.py` to change:
 ```bash
 python test/run_smoke.py
 ```
-
 This uses a tiny TFIM instance to validate the pipeline quickly.
