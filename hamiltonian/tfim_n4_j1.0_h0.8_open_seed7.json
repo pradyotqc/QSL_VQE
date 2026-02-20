@@ -1,0 +1,54 @@
+{
+  "metadata": {
+    "boundary": "open",
+    "disorder_scale": 0.1,
+    "h": 0.8,
+    "h_list": [
+      0.7287526528994182,
+      0.7636263371862623,
+      0.720668275600283,
+      0.804811488207795
+    ],
+    "j": 1.0,
+    "j_list": [
+      1.0001230153357483,
+      1.029874553750847,
+      0.9725862144637782
+    ],
+    "model": "TFIM",
+    "n_qubits": 4,
+    "random_couplings": true,
+    "seed": 7,
+    "sign_convention": "H = -sum J_i Z_i Z_{i+1} - sum h_i X_i"
+  },
+  "paulis": [
+    {
+      "coeff": -1.0001230153357483,
+      "label": "ZZII"
+    },
+    {
+      "coeff": -1.029874553750847,
+      "label": "IZZI"
+    },
+    {
+      "coeff": -0.9725862144637782,
+      "label": "IIZZ"
+    },
+    {
+      "coeff": -0.7287526528994182,
+      "label": "XIII"
+    },
+    {
+      "coeff": -0.7636263371862623,
+      "label": "IXII"
+    },
+    {
+      "coeff": -0.720668275600283,
+      "label": "IIXI"
+    },
+    {
+      "coeff": -0.804811488207795,
+      "label": "IIIX"
+    }
+  ]
+}
