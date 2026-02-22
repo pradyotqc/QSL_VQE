@@ -21,22 +21,77 @@ def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def run_parameter_sweep_for_optimizer(
+    config: ExperimentConfig,
+    hamiltonian,
+    seed_output_dir: Path,
+    *,
+    sweep_method: str,
+    sweep_layers: Tuple[int, ...],
+) -> Dict:
+    sweep_results: List[Dict] = []
+    for layer in sweep_layers:
+        cfg_layer = replace(config, layers=int(layer))
+        rng_layer = np.random.default_rng(config.seed + 2000 + int(layer))
+        ansatz_spec_layer = AnsatzSpec(
+            n_qubits=cfg_layer.n_qubits,
+            layers=cfg_layer.layers,
+            entanglement=cfg_layer.entanglement,
+        )
+        _, params_layer = hardware_efficient_ansatz(ansatz_spec_layer)
+        init_params = generate_initial_params(
+            cfg_layer.init_mode, rng_layer, len(params_layer)
+        )
+
+        result = run_optimizer(
+            cfg_layer,
+            hamiltonian,
+            rng_layer,
+            method=sweep_method,
+            init_params=init_params,
+        )
+
+        actual_iterations = len(result.trajectory.params) - 1
+        sweep_results.append(
+            {
+                "layers": int(layer),
+                "num_params": result.num_params,
+                "actual_iterations": actual_iterations,
+                "qsl_iterations": result.metrics.n_min,
+                "final_relation_holds": result.metrics.final_relation_holds,
+                "prefix_relation_holds": result.metrics.prefix_relation_holds,
+            }
+        )
+
+    sweep_plot_path = seed_output_dir / f"iter_vs_params_{sweep_method.replace(' ', '_')}.png"
+    plot_param_sweep(sweep_results, sweep_plot_path, optimizer_name=sweep_method)
+
+    return {
+        "optimizer": sweep_method,
+        "layers": list(sweep_layers),
+        "results": sweep_results,
+        "plot": str(sweep_plot_path),
+    }
+
+
 def run_tfim_experiment(
     config: ExperimentConfig,
     *,
     output_dir: str | Path = "result",
     hamiltonian_dir: str | Path = "hamiltonian",
     sweep_optimizer: str | None = None,
+    sweep_optimizers: Tuple[str, ...] | None = None,
     sweep_layers: Tuple[int, ...] = DEFAULT_SWEEP_LAYERS,
 ) -> Dict:
-    output_dir = ensure_dir(output_dir)
+    output_root = ensure_dir(output_dir)
+    seed_output_dir = ensure_dir(Path(output_root) / f"seed_{config.seed}")
     hamiltonian_dir = ensure_dir(hamiltonian_dir)
 
     hamiltonian, h_metadata, _ = build_hamiltonian(config)
 
     ham_name = (
         f"tfim_n{config.n_qubits}_j{config.j}_h{config.h}_"
-        f"{config.boundary}_seed{config.seed}.json"
+        f"{config.boundary}.json"
     )
     ham_path = Path(hamiltonian_dir) / ham_name
     save_hamiltonian_json(ham_path, hamiltonian, h_metadata)
@@ -44,9 +99,11 @@ def run_tfim_experiment(
     summary: Dict = {
         "timestamp_utc": _timestamp(),
         "config": asdict(config),
+        "result_dir": str(seed_output_dir),
         "hamiltonian_file": str(ham_path),
         "hamiltonian_metadata": asdict(h_metadata),
         "optimizer_runs": {},
+        "sweeps": [],
         "sweep": None,
     }
 
@@ -76,7 +133,7 @@ def run_tfim_experiment(
         plot_qsl_diagnostics(
             result.trajectory,
             result.metrics,
-            output_dir / f"qsl_diagnostics_{method.replace(' ', '_')}.png",
+            seed_output_dir / f"qsl_diagnostics_{method.replace(' ', '_')}.png",
             title_suffix=f"TFIM | {method} | params={result.num_params}",
         )
 
@@ -110,54 +167,30 @@ def run_tfim_experiment(
             },
         }
 
-    # Parameter sweep for one optimizer.
-    sweep_method = sweep_optimizer or (config.optimizers[0] if config.optimizers else None)
-    if sweep_method:
-        sweep_results: List[Dict] = []
-        for layer in sweep_layers:
-            cfg_layer = replace(config, layers=int(layer))
-            rng_layer = np.random.default_rng(config.seed + 2000 + int(layer))
-            ansatz_spec_layer = AnsatzSpec(
-                n_qubits=cfg_layer.n_qubits,
-                layers=cfg_layer.layers,
-                entanglement=cfg_layer.entanglement,
-            )
-            _, params_layer = hardware_efficient_ansatz(ansatz_spec_layer)
-            init_params = generate_initial_params(
-                cfg_layer.init_mode, rng_layer, len(params_layer)
-            )
+    # Parameter sweeps.
+    if sweep_optimizers is not None:
+        sweep_methods = tuple(dict.fromkeys(sweep_optimizers))
+    elif sweep_optimizer is not None:
+        sweep_methods = (sweep_optimizer,)
+    else:
+        sweep_methods = (config.optimizers[0],) if config.optimizers else ()
 
-            result = run_optimizer(
-                cfg_layer,
+    if sweep_methods:
+        sweeps = [
+            run_parameter_sweep_for_optimizer(
+                config,
                 hamiltonian,
-                rng_layer,
-                method=sweep_method,
-                init_params=init_params,
+                seed_output_dir,
+                sweep_method=method,
+                sweep_layers=sweep_layers,
             )
+            for method in sweep_methods
+        ]
+        summary["sweeps"] = sweeps
+        if len(sweeps) == 1:
+            summary["sweep"] = sweeps[0]
 
-            actual_iterations = len(result.trajectory.params) - 1
-            sweep_results.append(
-                {
-                    "layers": int(layer),
-                    "num_params": result.num_params,
-                    "actual_iterations": actual_iterations,
-                    "qsl_iterations": result.metrics.n_min,
-                    "final_relation_holds": result.metrics.final_relation_holds,
-                    "prefix_relation_holds": result.metrics.prefix_relation_holds,
-                }
-            )
-
-        sweep_plot_path = output_dir / f"iter_vs_params_{sweep_method.replace(' ', '_')}.png"
-        plot_param_sweep(sweep_results, sweep_plot_path, optimizer_name=sweep_method)
-
-        summary["sweep"] = {
-            "optimizer": sweep_method,
-            "layers": list(sweep_layers),
-            "results": sweep_results,
-            "plot": str(sweep_plot_path),
-        }
-
-    results_path = output_dir / "tfim_qsl_results.json"
+    results_path = seed_output_dir / "tfim_qsl_results.json"
     save_json(results_path, summary)
 
     return summary

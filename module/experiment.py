@@ -35,8 +35,8 @@ class ExperimentConfig:
     layers: int = 2
     entanglement: str = "linear"
     seed: int = 7
-    random_couplings: bool = True
-    disorder_scale: float = 0.1
+    random_couplings: bool = False
+    disorder_scale: float = 0.0
     init_mode: str = "random"
     optimizers: Tuple[str, ...] = ("COBYLA", "Nelder-Mead", "L-BFGS-B")
     maxiter: int = 160

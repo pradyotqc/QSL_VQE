@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "boundary": "open",
+    "disorder_scale": 0.0,
+    "h": 0.7,
+    "h_list": [
+      0.7,
+      0.7
+    ],
+    "j": 1.0,
+    "j_list": [
+      1.0
+    ],
+    "model": "TFIM",
+    "n_qubits": 2,
+    "random_couplings": false,
+    "seed": 99,
+    "sign_convention": "H = -sum J_i Z_i Z_{i+1} - sum h_i X_i"
+  },
+  "paulis": [
+    {
+      "coeff": -1.0,
+      "label": "ZZ"
+    },
+    {
+      "coeff": -0.7,
+      "label": "XI"
+    },
+    {
+      "coeff": -0.7,
+      "label": "IX"
+    }
+  ]
+}
